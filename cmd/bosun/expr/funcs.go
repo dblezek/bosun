@@ -97,6 +97,15 @@ var Graphite = map[string]parse.Func{
 	},
 }
 
+var InfluxDB = map[string]parse.Func{
+	"influxdb": {
+		[]parse.FuncType{parse.TypeString, parse.TypeString, parse.TypeString, parse.TypeString},
+		parse.TypeSeries,
+		influxDBTagQuery,
+		InfluxDBQuery,
+	},
+}
+
 // TSDB defines functions for use with an OpenTSDB backend.
 var TSDB = map[string]parse.Func{
 	"band": {

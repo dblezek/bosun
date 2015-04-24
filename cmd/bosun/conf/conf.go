@@ -60,6 +60,7 @@ type Conf struct {
 
 	TSDBHost             string                    // OpenTSDB relay and query destination: ny-devtsdb04:4242
 	GraphiteHost         string                    // Graphite query host: foo.bar.baz
+	InfluxDBHost         string                    // InfluxDB query host: http://foo.bar.baz:port
 	LogstashElasticHosts expr.LogstashElasticHosts // CSV Elastic Hosts (All part of the same cluster) that stores logstash documents, i.e http://ny-elastic01:9200
 
 	tree            *parse.Tree
@@ -109,6 +110,20 @@ func (c *Conf) GraphiteContext() graphite.Context {
 		return nil
 	}
 	return graphite.Host(c.GraphiteHost)
+}
+
+// InfluxDBContext returns a InfluxDB context. A nil context is returned if
+// InfluxDBHost is not set.
+func (c *Conf) InfluxDBContext() expr.IDBContext {
+	if c.InfluxDBHost == "" {
+		return nil
+	}
+	u, err := url.Parse(c.InfluxDBHost)
+	if err != nil {
+		log.Fatal("Could not parse influxDBHost as url(%v) %v", err)
+		return nil
+	}
+	return expr.NewIDBContext(*u)
 }
 
 type Squelch map[string]*regexp.Regexp
@@ -411,6 +426,8 @@ func (c *Conf) loadGlobal(p *parse.PairNode) {
 		c.TSDBHost = v
 	case "graphiteHost":
 		c.GraphiteHost = v
+	case "influxDBHost":
+		c.InfluxDBHost = v
 	case "logstashElasticHosts":
 		c.LogstashElasticHosts = strings.Split(v, ",")
 	case "httpListen":
@@ -1242,6 +1259,9 @@ func (c *Conf) Funcs() map[string]eparse.Func {
 	}
 	if c.GraphiteHost != "" {
 		merge(expr.Graphite)
+	}
+	if c.InfluxDBHost != "" {
+		merge(expr.InfluxDB)
 	}
 	if len(c.LogstashElasticHosts) != 0 {
 		merge(expr.LogstashElastic)

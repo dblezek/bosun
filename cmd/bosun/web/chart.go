@@ -203,8 +203,9 @@ func ExprGraph(t miniprofiler.Timer, w http.ResponseWriter, r *http.Request) (in
 	// it may not strictly be necessary to recreate the contexts each time, but we do to be safe
 	tsdbContext := schedule.Conf.TSDBContext()
 	graphiteContext := schedule.Conf.GraphiteContext()
+	influxDBContext := schedule.Conf.InfluxDBContext()
 	ls := schedule.Conf.LogstashElasticHosts
-	res, _, err := e.Execute(tsdbContext, graphiteContext, ls, cacheObj, t, now, autods, false, schedule.Search, nil, nil)
+	res, _, err := e.Execute(tsdbContext, graphiteContext, influxDBContext, ls, cacheObj, t, now, autods, false, schedule.Search, nil, nil)
 	if err != nil {
 		return nil, err
 	}

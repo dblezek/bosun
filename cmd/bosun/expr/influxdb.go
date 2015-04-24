@@ -1,9 +1,11 @@
 package expr
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/url"
+	"reflect"
 	"strings"
 	"time"
 
@@ -36,6 +38,7 @@ func NewIDBContext(u url.URL) iContext {
 }
 
 func InfluxDBQuery(e *State, T miniprofiler.Timer, query string, sduration, eduration, format string) (r *Results, err error) {
+
 	fmt.Printf("Starting InfluxDBQuery: \n\tState: %v\n\tQuery: %#v\n", e, query)
 	sd, err := opentsdb.ParseDuration(sduration)
 	if err != nil {
@@ -76,11 +79,15 @@ func influxDBTagQuery(args []parse.Node) (parse.Tags, error) {
 	return t, nil
 }
 
-func timeInfluxDBRequest(e *State, T miniprofiler.Timer, req *idbRequest) (resp *Results, err error) {
+func timeInfluxDBRequest(e *State, T miniprofiler.Timer, req *idbRequest) (r *Results, err error) {
 	// e.graphiteQueries = append(e.graphiteQueries, *req)
 	// b, _ := json.MarshalIndent(req, "", "  ")
 	T.StepCustomTiming("influxDB", "query", "value here", func() {
-		resp = &Results{}
+		r = new(Results)
+		r.IgnoreOtherUnjoined = true
+		r.IgnoreUnjoined = true
+		r.Results = make([]*Result, 0)
+
 		connection, _ := client.NewClient(client.Config{URL: e.influxDBContext.URL()})
 		q := client.Query{
 			Command:  req.Query,
@@ -101,10 +108,30 @@ func timeInfluxDBRequest(e *State, T miniprofiler.Timer, req *idbRequest) (resp 
 			// tags := make(opentsdb.TagSet)
 			log.Printf("\t\tResult had %v Series/Rows\n", len(result.Series))
 			for _, row := range result.Series {
+				// Create a Result object
+				tags := opentsdb.TagSet(row.Tags)
+				s := make(Series)
+				for _, d := range row.Values {
+					if len(d) != 2 {
+						r = nil
+						err = fmt.Errorf("influxDB ParseError: %s", fmt.Sprintf("Datapoint has more than 2 fields: %v", d))
+						return
+					}
+					timeStampString, tsOK := d[0].(string)
+					number, numberOK := d[1].(json.Number)
+					if tsOK && numberOK {
+						log.Printf("Found row: %v of %v, %v\n", d, reflect.TypeOf(d[0]), reflect.TypeOf(d[1]))
+						timeStamp, _ := time.Parse(time.RFC3339, timeStampString)
+						v, _ := number.Float64()
+						s[timeStamp] = v
+					}
+				}
+
 				log.Printf("Name: %v\n", row.Name)
 				log.Printf("Tags: %v\n", row.Tags)
 				log.Printf("Columns: %v\n", row.Columns)
 				log.Printf("Data: %v\n", row.Values)
+				r.Results = append(r.Results, &Result{Value: s, Group: tags})
 			}
 		}
 		// key := req.CacheKey()

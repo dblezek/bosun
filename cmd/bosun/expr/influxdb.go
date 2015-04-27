@@ -80,17 +80,28 @@ func influxDBTagQuery(args []parse.Node) (parse.Tags, error) {
 }
 
 func timeInfluxDBRequest(e *State, T miniprofiler.Timer, req *idbRequest) (r *Results, err error) {
+	log.Printf("Query start: %v end %v\n", req.Start.String(), req.End.String())
 	// e.graphiteQueries = append(e.graphiteQueries, *req)
 	// b, _ := json.MarshalIndent(req, "", "  ")
 	T.StepCustomTiming("influxDB", "query", "value here", func() {
 		r = new(Results)
-		r.IgnoreOtherUnjoined = true
-		r.IgnoreUnjoined = true
 		r.Results = make([]*Result, 0)
+
+		hasWhere := strings.Contains(strings.ToLower(req.Query), "where")
+		queryString := req.Query
+		if !hasWhere {
+			queryString = queryString + " where "
+		} else {
+			queryString = queryString + " and "
+		}
+		timeFormat := "YYYY-MM-DD HH:MM:SS.mmm"
+		timeFormat = "2006-01-02 15:04:05"
+		queryString = queryString + " time > '" + req.Start.Format(timeFormat) + "' and time < '" + req.End.Format(timeFormat) + "'"
+		log.Printf("Executing query: %v\n", queryString)
 
 		connection, _ := client.NewClient(client.Config{URL: e.influxDBContext.URL()})
 		q := client.Query{
-			Command:  req.Query,
+			Command:  queryString,
 			Database: "dewey",
 		}
 		response, err := connection.Query(q)
@@ -119,18 +130,18 @@ func timeInfluxDBRequest(e *State, T miniprofiler.Timer, req *idbRequest) (r *Re
 					}
 					timeStampString, tsOK := d[0].(string)
 					number, numberOK := d[1].(json.Number)
+					log.Printf("Parsing value %v TS: %v Number: %v", d, tsOK, numberOK)
+					log.Printf("Found row: %v of %v, %v\n", d, reflect.TypeOf(d[0]), reflect.TypeOf(d[1]))
 					if tsOK && numberOK {
-						log.Printf("Found row: %v of %v, %v\n", d, reflect.TypeOf(d[0]), reflect.TypeOf(d[1]))
 						timeStamp, _ := time.Parse(time.RFC3339, timeStampString)
 						v, _ := number.Float64()
 						s[timeStamp] = v
 					}
 				}
 
-				log.Printf("Name: %v\n", row.Name)
-				log.Printf("Tags: %v\n", row.Tags)
+				log.Printf("Tags: %v\n", tags)
 				log.Printf("Columns: %v\n", row.Columns)
-				log.Printf("Data: %v\n", row.Values)
+				// log.Printf("Data: %v\n", row.Values)
 				r.Results = append(r.Results, &Result{Value: s, Group: tags})
 			}
 		}

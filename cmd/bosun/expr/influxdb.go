@@ -96,7 +96,11 @@ func timeInfluxDBRequest(e *State, T miniprofiler.Timer, req *idbRequest) (r *Re
 		}
 		timeFormat := "YYYY-MM-DD HH:MM:SS.mmm"
 		timeFormat = "2006-01-02 15:04:05"
-		queryString = queryString + " time > '" + req.Start.Format(timeFormat) + "' and time < '" + req.End.Format(timeFormat) + "'"
+		queryString += " time > '" + req.Start.Format(timeFormat) + "' and time < '" + req.End.Format(timeFormat) + "'"
+
+		// Add a group by to get the tags
+		queryString += " group by *"
+
 		log.Printf("Executing query: %v\n", queryString)
 
 		connection, _ := client.NewClient(client.Config{URL: e.influxDBContext.URL()})
